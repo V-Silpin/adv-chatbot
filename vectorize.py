@@ -10,9 +10,9 @@ from pinecone_text.sparse import BM25Encoder
 class Vectorize():
     def __init__(self):
         self.docs = None
-        self.index_name = "hybrid-search-langchain-pinecone"
+        self.index_name = "hybrid-search-better-embed"
         load_dotenv()
-        self.google_api_key = os.getenv("GOOGLE_API_KEY")
+        self.google_api_key = os.getenv("GEMINI_API_KEY")
         self.pinecone_key = os.getenv("PINECONE_API_KEY")
     def chunker(self, url):
         loader = WebBaseLoader(url)
@@ -27,5 +27,6 @@ class Vectorize():
         self.index = pc.Index(self.index_name)
         bm25_encoder=BM25Encoder().default()
         retriever = PineconeHybridSearchRetriever(embeddings=embeddings, sparse_encoder=bm25_encoder, index=self.index)
-        retriever.add_texts(self.docs)
-        print("Storage Done")        
+        texts = [doc.page_content for doc in self.docs]
+        retriever.add_texts(texts)
+        print("Storage Done")
