@@ -10,8 +10,8 @@ from pinecone_text.sparse import BM25Encoder
 class Vectorize():
     def __init__(self):
         self.docs = None
-        self.index_name = "hybrid-search-better-embed"
         load_dotenv()
+        self.index_name = os.getenv("INDEX_NAME")
         self.google_api_key = os.getenv("GEMINI_API_KEY")
         self.pinecone_key = os.getenv("PINECONE_API_KEY")
     def chunker(self, url):

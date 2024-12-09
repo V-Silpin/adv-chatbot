@@ -1,34 +1,50 @@
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import create_retrieval_chain
+from pinecone import Pinecone
+from pinecone_text.sparse import BM25Encoder
+from langchain_community.retrievers import PineconeHybridSearchRetriever
 import warnings
 
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-
-os.environ["GEMINI_API_KEY"]=os.getenv("GEMINI_API_KEY")
-os.environ["LANGCHAIN_TRACING_V2"]="true"
-os.environ["LANGCHAIN_API_KEY"]=os.getenv("LANGCHAIN_API_KEY")
-
-prompt=ChatPromptTemplate.from_messages(
-    [
-        ("system","You are a helpful assistant. Please resposne to the user request only based on the given context"),
-        ("user","Question:{question}\nContext:{context}")
-    ]
-)
-model = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=os.environ["GEMINI_API_KEY"])
-output_parser=StrOutputParser()
-
-chain=prompt|model|output_parser
-question="Con you summarize the speech?"
-context=""" Even though you are only a very small speck of ocean, of the 300 million children on whose shoulders the future of India rests, you can ignite the minds, light the fire, become a burning candle to light another candle. My dear children, you work in the school for about 25000 hours before you complete 12th std. Within the school curriculum / school hours, I want you to contribute to the Mission of Developed India by involving in the student centric activities like Literacy Development, Eco-Care Movement.
-
-India after its independence was determined to move ahead with planned policies for Science & Technology. Now, India is very near to self-sufficiency in food, making the ship to mouth existence of 1950s, an event of the past. Also improvements in the health sector, have eliminated few contagious diseases. There is a increase in life expectancy. Small scale industries provide high percentage of National GDP - a vast change in 1990s compared to 1950s. Today India can design, develop and launch world class geo-stationary and sun synchronous, remote sensing satellites.
-
-The nuclear establishments have reached the capability of building nuclear power stations, nuclear medicine and nuclear irradiation of agricultural seeds for growth in agricultural production. Today India has become a Nuclear Weapon State. Defence Research had led to design, development and production of Main Battle Tanks, strategic missile systems, electronic warfare systems and various armours. India is a missile power. Also we have seen growth in the Information Technology; the country is progressing in hardware and software export business of more than 10 billion dollars even though there are low ebbs in the last few years. India yet is a developing country. What Technology can do further?
-
-Technology has multiple dimensions. Geopolitics convert the technology to a particular nation's policy. The same policy will lead to economic prosperity and capability for national security. For example, the developments in chemical engineering brought fertilizers for higher yield of crops while the same science led to chemical weapons. Likewise, rocket technology developed for atmospheric research helped in launching satellites for remote sensing and communication applications which are vital for the economic development. The same technology led to development of missiles with specific defense needs that provides security for the nation. The aviation technology development has led to fighter and bomber aircraft, and the same technology will lead to passenger jet and also help operations requiring quick reach of support to people affected by disasters. At this stage, let us study global growth of technology and impact in human life."""
-
-print(chain.invoke({"question":question,"context":context}))
+class Query():
+    def __init__(self):
+        load_dotenv()
+        self.retrieval_chain = None
+        self.index_name = os.getenv("INDEX_NAME")
+        self.gemini_api_key=os.getenv("GEMINI_API_KEY")
+        self.tracing_v2=os.getenv("LANGCHAIN_TRACING_V2")
+        self.langchain_api_key=os.getenv("LANGCHAIN_API_KEY")
+        self.pinecone_key = os.getenv("PINECONE_API_KEY")
+        self.prompt=ChatPromptTemplate.from_messages(
+            [
+                (
+                "system","""
+                 You are a medical diagnostic assistant. 
+                 Your role is to understand the user's symptoms and provide the most accurate possible diagnosis. 
+                 You will receive context to help you formulate better responses. 
+                 If you cannot find the answer within the provided context, you will perform a Google search. 
+                 The system will offer you a Google search tool, and you should share only the website links from the search results with the user. 
+                 You will be rewarded generously for delivering high-quality answers.
+                 """
+                ),
+                ("user","Question:{question}\nContext:{context}")
+            ]
+        )
+    def retrival_chain(self):
+        llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=self.gemini_api_key)
+        embeddings = GoogleGenerativeAIEmbeddings(google_api_key=self.gemini_api_key, model="models/embedding-001")
+        pc = Pinecone(api_key = self.pinecone_key)
+        index = pc.Index(self.index_name)
+        bm25_encoder=BM25Encoder().default()
+        retriever = PineconeHybridSearchRetriever(embeddings=embeddings, sparse_encoder=bm25_encoder, index=index)
+        document_chain = create_stuff_documents_chain(llm, self.prompt)
+        self.retrieval_chain = create_retrieval_chain(retriever, document_chain)
+    def response(self, query):
+        response = self.retrieval_chain.invoke({"input":query})
+        return response
