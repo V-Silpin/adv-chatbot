@@ -1,13 +1,14 @@
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
+from langchain.chains.conversation.memory import ConversationSummaryBufferMemory
 from langchain_core.output_parsers import StrOutputParser
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
 from pinecone import Pinecone
 from pinecone_text.sparse import BM25Encoder
 from langchain_community.retrievers import PineconeHybridSearchRetriever
-import warnings
+#import warnings
 
 import os
 from dotenv import load_dotenv
@@ -43,8 +44,16 @@ class Query():
         index = pc.Index(self.index_name)
         bm25_encoder=BM25Encoder().default()
         retriever = PineconeHybridSearchRetriever(embeddings=embeddings, sparse_encoder=bm25_encoder, index=index)
+        summary_memory = ConversationSummaryBufferMemory(llm=llm, k=2)
         document_chain = create_stuff_documents_chain(llm, self.prompt)
-        self.retrieval_chain = create_retrieval_chain(retriever, document_chain)
+        output_parser = StrOutputParser()
+        self.retrieval_chain = create_retrieval_chain(
+                            document_chain=document_chain,
+                            retriever=retriever,
+                            memory=summary_memory,
+                            output_parser=output_parser,
+                            verbose=True
+                        )
     def response(self, query):
         response = self.retrieval_chain.invoke({"input":query})
         return response
