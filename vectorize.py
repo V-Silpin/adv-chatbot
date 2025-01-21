@@ -14,12 +14,13 @@ class Vectorize():
         self.index_name = os.getenv("INDEX_NAME")
         self.google_api_key = os.getenv("GEMINI_API_KEY")
         self.pinecone_key = os.getenv("PINECONE_API_KEY")
-    def chunker(self, url):
-        loader = WebBaseLoader(url)
-        data = []
-        data.extend(loader.load())
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0, separators=["\n\n", "\n", r"(?<=\.)", " "], length_function=len)
-        self.docs = text_splitter.split_documents(data)
+    def chunker(self, urls):
+        docs = [WebBaseLoader(url).load() for url in urls]
+        docs_list = [item for sublist in docs for item in sublist]
+        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            chunk_size=250, chunk_overlap=0
+        )
+        self.docs = text_splitter.split_documents(docs_list)
         print("Processing Done")
     def store(self):
         embeddings = GoogleGenerativeAIEmbeddings(google_api_key=self.google_api_key, model="models/embedding-001")
